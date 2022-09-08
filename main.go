@@ -13,14 +13,14 @@ import (
 type Suit uint8
 
 const (
-	Clubs Suit = iota
-	Diamonds
+	Spades Suit = iota
 	Hearts
-	Spades
+	Clubs
+	Diamonds
 )
 
-var suits []string = []string{"♣", "♦", "♥", "♠"}
-var numbers []string = []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
+var suits = map[Suit]string{Spades: "♠", Hearts: "♥", Clubs: "♣", Diamonds: "♦"}
+var numbers = [...]string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
 
 type Card struct {
 	suit   Suit
@@ -59,21 +59,31 @@ func main() {
 	}
 }
 
-func randomHands() [4]Hand {
+func newDeck() []Card {
 	var deck []Card
-	for suit := Clubs; suit <= Spades; suit++ {
-		for number := 0; number <= 12; number++ {
-			deck = append(deck, Card{suit: suit, number: number})
+	for suit := range suits {
+		for number := range numbers {
+			deck = append(deck, Card{suit, number})
 		}
 	}
+	return deck
+}
+
+func randomCard(deck []Card) (picked Card, remaining []Card) {
+	pickedIdx := rand.Intn(len(deck))
+	pickedCard := deck[pickedIdx]
+	return pickedCard, slices.Delete(deck, pickedIdx, pickedIdx+1)
+}
+
+func randomHands() [4]Hand {
+	deck := newDeck()
 
 	var hands [4]Hand
 	for len(deck) > 0 {
-		pickedIdx := rand.Intn(len(deck))
-		pickedCard := deck[pickedIdx]
-		deck = slices.Delete(deck, pickedIdx, pickedIdx+1)
+		var pickedCard Card
+		pickedCard, deck = randomCard(deck)
 
-		handIdx := (52 - len(deck) - 1) / 13
+		handIdx := len(deck) % len(hands)
 		hands[handIdx] = append(hands[handIdx], pickedCard)
 	}
 
@@ -84,9 +94,9 @@ func randomHands() [4]Hand {
 	return hands
 }
 
-func winner(cards [4]Card) int {
+func winner(cards []Card) int {
 	winningIdx := 0
-	for cardIdx := 1; cardIdx < 4; cardIdx++ {
+	for cardIdx := 1; cardIdx < len(cards); cardIdx++ {
 		winnerSoFar := cards[winningIdx]
 		if cards[cardIdx].suit == winnerSoFar.suit {
 			if cards[cardIdx].number > winnerSoFar.number {
