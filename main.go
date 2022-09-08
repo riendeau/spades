@@ -53,7 +53,7 @@ func (hand Hand) Swap(i, j int) { hand[i], hand[j] = hand[j], hand[i] }
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	hands := randomHands()
+	hands := randomHands(4)
 	for handIdx, hand := range hands {
 		fmt.Printf("Hand %d: %s\n", handIdx+1, hand)
 	}
@@ -75,15 +75,16 @@ func randomCard(deck []Card) (picked Card, remaining []Card) {
 	return pickedCard, slices.Delete(deck, pickedIdx, pickedIdx+1)
 }
 
-func randomHands() [4]Hand {
+func randomHands(numHands int) []Hand {
 	deck := newDeck()
 
-	var hands [4]Hand
+	hands := make([]Hand, numHands)
+
 	for len(deck) > 0 {
 		var pickedCard Card
 		pickedCard, deck = randomCard(deck)
 
-		handIdx := len(deck) % len(hands)
+		handIdx := len(deck) % numHands
 		hands[handIdx] = append(hands[handIdx], pickedCard)
 	}
 
