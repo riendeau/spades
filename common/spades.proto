@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "github.com/riendeau/spades/common";
+
+package common;
+
+service Spades {
+  rpc Register (RegisterRequest) returns (RegisterReply) {}
+}
+
+message RegisterRequest {
+  string name = 1;
+}
+
+message RegisterReply {
+    string token = 1;
+}
