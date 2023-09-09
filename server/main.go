@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -16,18 +17,43 @@ type server struct {
 	common.UnimplementedSpadesServer
 }
 
-var uuidToName = make(map[string]string, 4)
+type player struct {
+	token        string
+	name         string
+	eventChannel chan string
+}
+
+var players []player
 
 func (s *server) Register(ctx context.Context, in *common.RegisterRequest) (*common.RegisterReply, error) {
 	log.Printf("Received register request; name: %s", in.GetName())
-	if len(uuidToName) >= 4 {
+	if len(players) >= 4 {
 		return nil, common.ErrGameFull
 	}
 
-	uuid := uuid.NewString()
-	uuidToName[uuid] = in.GetName()
+	newPlayer := player{
+		name:         in.GetName(),
+		token:        uuid.NewString(),
+		eventChannel: make(chan string),
+	}
 
-	return &common.RegisterReply{Token: uuid}, nil
+	for i := range players {
+		players[i].eventChannel <- fmt.Sprintf("%s sat down", newPlayer.name)
+	}
+
+	players = append(players, newPlayer)
+	return &common.RegisterReply{Token: newPlayer.token}, nil
+}
+
+func (s *server) Events(in *common.EventsRequest, srv common.Spades_EventsServer) error {
+	for i := range players {
+		if players[i].token == in.PlayerToken {
+			for nextEvent := range players[i].eventChannel {
+				srv.Send(&common.EventReply{Description: nextEvent})
+			}
+		}
+	}
+	return nil
 }
 
 func main() {

@@ -23,6 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SpadesClient interface {
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterReply, error)
+	Events(ctx context.Context, in *EventsRequest, opts ...grpc.CallOption) (Spades_EventsClient, error)
 }
 
 type spadesClient struct {
@@ -42,11 +43,44 @@ func (c *spadesClient) Register(ctx context.Context, in *RegisterRequest, opts .
 	return out, nil
 }
 
+func (c *spadesClient) Events(ctx context.Context, in *EventsRequest, opts ...grpc.CallOption) (Spades_EventsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Spades_ServiceDesc.Streams[0], "/common.Spades/Events", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &spadesEventsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Spades_EventsClient interface {
+	Recv() (*EventReply, error)
+	grpc.ClientStream
+}
+
+type spadesEventsClient struct {
+	grpc.ClientStream
+}
+
+func (x *spadesEventsClient) Recv() (*EventReply, error) {
+	m := new(EventReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SpadesServer is the server API for Spades service.
 // All implementations must embed UnimplementedSpadesServer
 // for forward compatibility
 type SpadesServer interface {
 	Register(context.Context, *RegisterRequest) (*RegisterReply, error)
+	Events(*EventsRequest, Spades_EventsServer) error
 	mustEmbedUnimplementedSpadesServer()
 }
 
@@ -56,6 +90,9 @@ type UnimplementedSpadesServer struct {
 
 func (UnimplementedSpadesServer) Register(context.Context, *RegisterRequest) (*RegisterReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedSpadesServer) Events(*EventsRequest, Spades_EventsServer) error {
+	return status.Errorf(codes.Unimplemented, "method Events not implemented")
 }
 func (UnimplementedSpadesServer) mustEmbedUnimplementedSpadesServer() {}
 
@@ -88,6 +125,27 @@ func _Spades_Register_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Spades_Events_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(EventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SpadesServer).Events(m, &spadesEventsServer{stream})
+}
+
+type Spades_EventsServer interface {
+	Send(*EventReply) error
+	grpc.ServerStream
+}
+
+type spadesEventsServer struct {
+	grpc.ServerStream
+}
+
+func (x *spadesEventsServer) Send(m *EventReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Spades_ServiceDesc is the grpc.ServiceDesc for Spades service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +158,12 @@ var Spades_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Spades_Register_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Events",
+			Handler:       _Spades_Events_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "common/spades.proto",
 }
