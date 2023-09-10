@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/riendeau/spades/common"
@@ -26,8 +28,17 @@ func main() {
 
 	http.HandleFunc("/register", handleRegister)
 
-	err = http.ListenAndServe(fmt.Sprintf(":%s", os.Args[1]), nil)
-	log.Printf("Server terminted with %v", err)
+	port := 8600 + rand.Intn(100)
+	if len(os.Args) > 1 {
+		port, err = strconv.Atoi(os.Args[1])
+		if err != nil {
+			log.Fatalf("Could not parse specified port to integer: %v", err)
+		}
+	}
+
+	log.Printf("Listening on port %d", port)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	log.Printf("Server terminated with %v", err)
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -37,12 +48,12 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	registerReply, err := c.Register(ctx, &common.RegisterRequest{Name: name})
 	if err == nil {
-		receiveEvents(registerReply.Token)
+		startEventStream(registerReply.Token)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(registerReply.Token))
 		return
@@ -51,12 +62,12 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	log.Printf("error when registering %s: %v", name, err)
 	statusCode := http.StatusInternalServerError
 	if err == common.ErrGameFull {
-		statusCode = http.StatusTeapot
+		statusCode = http.StatusServiceUnavailable
 	}
 	w.WriteHeader(statusCode)
 }
 
-func receiveEvents(token string) {
+func startEventStream(token string) {
 	eventsClient, err := c.Events(context.Background(), &common.EventsRequest{PlayerToken: token})
 	if err != nil {
 		log.Fatalf("could not establish events stream: %v", err)
@@ -67,10 +78,13 @@ func receiveEvents(token string) {
 			event, err := eventsClient.Recv()
 			if err != nil {
 				log.Printf("Error receiving event: %v", err)
-				continue
+				return
 			}
-
-			log.Printf("Received event: %s", event.Description)
+			handleEvent(event)
 		}
 	}()
+}
+
+func handleEvent(event *common.EventReply) {
+	log.Printf("Received event: %s", event.Description)
 }
