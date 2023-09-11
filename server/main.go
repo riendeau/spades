@@ -1,21 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"math/rand"
-	"net"
-	"sort"
+	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
-	"github.com/riendeau/spades/common"
-	"google.golang.org/grpc"
+	"github.com/gorilla/websocket"
 )
-
-type server struct {
-	common.UnimplementedSpadesServer
-}
 
 type player struct {
 	token        string
@@ -25,72 +18,97 @@ type player struct {
 
 var players []player
 
-func (s *server) Register(ctx context.Context, in *common.RegisterRequest) (*common.RegisterReply, error) {
-	log.Printf("Received register request; name: %s", in.GetName())
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+func join(conn *websocket.Conn, name string) {
+	log.Printf("Received register request; name: %s", name)
 	if len(players) >= 4 {
-		return nil, common.ErrGameFull
+		sendMessage(conn, "joinreply full")
+		return
 	}
 
 	newPlayer := player{
-		name:         in.GetName(),
+		name:         name,
 		token:        uuid.NewString(),
 		eventChannel: make(chan string),
 	}
 
-	for i := range players {
-		players[i].eventChannel <- fmt.Sprintf("%s sat down", newPlayer.name)
-	}
+	go func() {
+		for nextEvent := range newPlayer.eventChannel {
+			sendMessage(conn, nextEvent)
+		}
+	}()
 
 	players = append(players, newPlayer)
-	return &common.RegisterReply{Token: newPlayer.token}, nil
+
+	joinReply := "players"
+	for _, player := range players {
+		joinReply = fmt.Sprintf("%s %s", joinReply, player.name)
+	}
+
+	for i := range players {
+		players[i].eventChannel <- joinReply
+	}
 }
 
-func (s *server) Events(in *common.EventsRequest, srv common.Spades_EventsServer) error {
-	for i := range players {
-		if players[i].token == in.PlayerToken {
-			for nextEvent := range players[i].eventChannel {
-				srv.Send(&common.EventReply{Description: nextEvent})
-			}
-		}
+func serveHome(w http.ResponseWriter, r *http.Request) {
+	log.Println(r.URL)
+	if r.URL.Path != "/" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
 	}
-	return nil
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	http.ServeFile(w, r, "spades.html")
+}
+
+func serveWs(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	go func() {
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("Error reading message: %v", err)
+				return
+			}
+			processMessage(conn, string(msg))
+		}
+	}()
+}
+
+func sendMessage(conn *websocket.Conn, message string) {
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
+		log.Printf("Error sending message %s: %v", message, err)
+	} else {
+		log.Printf("Sent message %s", message)
+	}
+}
+
+func processMessage(conn *websocket.Conn, message string) {
+	log.Printf("Received message: %s", message)
+
+	segments := strings.Split(message, " ")
+	switch segments[0] {
+	case "join":
+		join(conn, segments[1])
+	}
 }
 
 func main() {
-	lis, err := net.Listen("tcp", ":50050")
+	http.HandleFunc("/", serveHome)
+	http.HandleFunc("/ws", serveWs)
+	err := http.ListenAndServe(":8089", nil)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		panic("ListenAndServe: " + err.Error())
 	}
-	s := grpc.NewServer()
-	common.RegisterSpadesServer(s, &server{})
-	log.Printf("server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-}
-
-func shuffledDeck() []common.Card {
-	var deck []common.Card
-	for suit := range common.SuitToRune {
-		for rank := range common.CardRanks {
-			deck = append(deck, common.Card{Suit: suit, RankIndex: rank})
-		}
-	}
-	rand.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
-	return deck
-}
-
-func randomHands(numHands int) []common.Hand {
-	deck := shuffledDeck()
-	hands := make([]common.Hand, numHands)
-	cardsPerHand := len(deck) / numHands
-
-	for i := 0; i < numHands; i++ {
-		startIdx := i * cardsPerHand
-		endIdx := startIdx + cardsPerHand
-		hands[i] = deck[startIdx:endIdx]
-		sort.Sort(hands[i])
-	}
-
-	return hands
 }

@@ -1,0 +1,104 @@
+<!DOCTYPE HTML>
+<html>
+   <head>
+    <script type="text/javascript">
+        window.onload = function () {
+            var conn;
+            var name = document.getElementById("name");
+            var log = document.getElementById("log");
+            var players = document.getElementById("players");
+            var canvas = document.getElementById("canvas");
+            var canvasCtx = canvas.getContext("2d");
+
+            canvasCtx.fillStyle = "green";
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+        
+            function appendLog(item) {
+                var doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
+                log.appendChild(item);
+                if (doScroll) {
+                    log.scrollTop = log.scrollHeight - log.clientHeight;
+                }
+            }
+        
+            document.getElementById("form").onsubmit = function () {
+                if (!conn) {
+                    return false;
+                }
+                if (!name.value) {
+                    return false;
+                }
+                conn.send("join " + name.value);
+                name.value = "";
+                return false;
+            };
+        
+            if (window["WebSocket"]) {
+                conn = new WebSocket("ws://" + document.location.host + "/ws");
+                conn.onclose = function (evt) {
+                    var item = document.createElement("div");
+                    item.innerHTML = "<b>Connection closed.</b>";
+                    appendLog(item);
+                };
+                conn.onmessage = function (evt) {
+                    var messages = evt.data.split('\n');
+                    for (var i = 0; i < messages.length; i++) {
+                        var item = document.createElement("div");
+                        item.innerText = messages[i];
+                        appendLog(item);
+
+                        var segments = messages[i].split(' ')
+                        console.log("Got " + segments[0])
+                        if (segments[0] == "players") {
+                            canvasCtx.font = "24px sans-serif";
+                            canvasCtx.fillStyle = "white";
+                            for (var i = 1; i < segments.length; i++) {
+                                if (i == 1) {
+                                    x = canvas.width / 2
+                                    y = 25
+                                    canvasCtx.textBaseline = "top";
+                                    canvasCtx.textAlign = "center";
+                                }
+                                if (i == 2) {
+                                    x = canvas.width / 2
+                                    y = canvas.height - 25
+                                    canvasCtx.textBaseline = "bottom";
+                                    canvasCtx.textAlign = "center";
+                                }
+                                if (i == 3) {
+                                    x = 25
+                                    y = canvas.height / 2
+                                    canvasCtx.textBaseline = "middle";
+                                    canvasCtx.textAlign = "left";
+                                }
+                                if (i == 4) {
+                                    x = canvas.width - 25
+                                    y = canvas.height / 2
+                                    canvasCtx.textBaseline = "middle";
+                                    canvasCtx.textAlign = "right";
+                                }
+                                canvasCtx.fillText(segments[i], x, y);
+                            }
+                        }
+                    }
+                };
+            } else {
+                var item = document.createElement("div");
+                item.innerHTML = "<b>Your browser does not support WebSockets.</b>";
+                appendLog(item);
+            }
+        };
+        </script>    
+   </head>
+
+   <body>
+        <form id="form">
+            <label for="name">Name:</label>
+            <input type="text" id="name" size="64" autofocus />
+            <input type="submit" value="Send" />
+        </form>
+        <canvas id="canvas" width="1600" height="900"></canvas>
+        <hr/>
+        <div id="log"></div>
+   </body>
+</html>
