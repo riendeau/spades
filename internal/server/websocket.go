@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"fmt"
@@ -7,7 +7,13 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
+	"github.com/riendeau/spades/internal/spades"
 )
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
 type client struct {
 	eventChannel chan string
@@ -16,11 +22,6 @@ type client struct {
 }
 
 var clients []*client
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
 
 func getPlayers() [4]*client {
 	var playerClients [4]*client
@@ -64,8 +65,15 @@ func sit(client *client, name string) {
 	}
 
 	if freeIdx := freeIdx(); freeIdx > 3 {
+		hands := spades.RandomHands(4)
 		for i := range clients {
-			clients[i].eventChannel <- "newhand"
+			newHandReply := "newhand"
+			if clients[i].seat > 0 {
+				for _, card := range hands[clients[i].seat-1] {
+					newHandReply += (" " + card.String())
+				}
+			}
+			clients[i].eventChannel <- newHandReply
 		}
 	}
 }
@@ -83,24 +91,7 @@ func buildPlayerList() string {
 	return playerListReply
 }
 
-func serveHome(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL)
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if r.URL.Path == "/" {
-		http.ServeFile(w, r, "spades.html")
-		return
-	}
-	if strings.HasPrefix(r.URL.Path, "/images/") {
-		http.ServeFile(w, r, r.URL.Path[1:])
-		return
-	}
-	http.Error(w, "Not found", http.StatusNotFound)
-}
-
-func serveWs(w http.ResponseWriter, r *http.Request) {
+func ServeWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -141,14 +132,5 @@ func processMessage(client *client, message string) {
 	switch segments[0] {
 	case "sit":
 		sit(client, segments[1])
-	}
-}
-
-func main() {
-	http.HandleFunc("/", serveHome)
-	http.HandleFunc("/ws", serveWs)
-	err := http.ListenAndServe(":8089", nil)
-	if err != nil {
-		panic("ListenAndServe: " + err.Error())
 	}
 }

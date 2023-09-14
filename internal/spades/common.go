@@ -1,4 +1,4 @@
-package common
+package spades
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ const (
 	Diamonds
 )
 
-var SuitToRune = map[Suit]string{Spades: "♠", Hearts: "♥", Clubs: "♣", Diamonds: "♦"}
+var SuitToRune = map[Suit]string{Spades: "s", Hearts: "h", Clubs: "c", Diamonds: "d"}
 var CardRanks = [...]string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
 
 var ErrGameFull = errors.New("game is already full")
@@ -26,7 +26,7 @@ type Card struct {
 }
 
 func (card Card) String() string {
-	return fmt.Sprintf("%s%s", SuitToRune[card.Suit], CardRanks[card.RankIndex])
+	return fmt.Sprintf("%s%s", CardRanks[card.RankIndex], SuitToRune[card.Suit])
 }
 
 type Hand []Card

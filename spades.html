@@ -8,10 +8,22 @@
                 return;
             }
 
+            const suits = ['s', 'h', 'c', 'd'];
+            const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+            const cardImages = {};
+            for (var suitIdx = 0; suitIdx < 4; suitIdx++) {
+                for (var rankIdx = 0; rankIdx < 13; rankIdx++) {
+                    const key = "" + ranks[rankIdx] + suits[suitIdx]
+                    const cardImage = new Image();
+                    cardImage.src = "images/" + key + ".png";
+                    cardImages[key] = cardImage;
+                }
+            }
+
             var conn;
-            var name = document.getElementById("name");
-            var canvas = document.getElementById("canvas");
-            var canvasCtx = canvas.getContext("2d");
+            const name = document.getElementById("name");
+            const canvas = document.getElementById("canvas");
+            const canvasCtx = canvas.getContext("2d");
 
             function clearCanvas() {
                 canvasCtx.fillStyle = "green";
@@ -68,11 +80,9 @@
                             canvasCtx.fillText(segments[i], x, y);
                         }
                     } else if (segments[0] == "newhand") {
-                        const img = new Image();
-                        img.onload = function() {
-                            canvasCtx.drawImage(img, canvas.width / 2, 100, 100, 150)
+                        for (var i = 1; i < segments.length; i++) {
+                            canvasCtx.drawImage(cardImages[segments[i]], 80 + (i * 20), 100, 100, 150)
                         }
-                        img.src = "images/2_of_clubs.png"
                     }
                 }
             };
